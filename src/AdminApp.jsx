@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   LayoutDashboard, Store, Flag, Search, Pencil, X, Plus,
-  ArrowLeft, MapPin, Phone, AtSign, Tag,
+  ArrowLeft, MapPin, Phone, AtSign, Tag, Download, Trash2,
 } from "lucide-react";
 import { palette, CATEGORIES, average } from "./lib/constants";
-import { useEstablishments, useReviews, establishmentsApi, reviewsApi, ensureSeeded } from "./lib/store";
+import { useEstablishments, useReviews, establishmentsApi, reviewsApi, addEstablishment, ensureSeeded } from "./lib/store";
+import { fetchAnapolisPlaces } from "./lib/osm";
 
 function StatusPill({ status }) {
   const isAprovado = status === "aprovado";
@@ -53,6 +54,8 @@ export default function AdminApp() {
   const [promoTitle, setPromoTitle] = useState("");
   const [promoDesc, setPromoDesc] = useState("");
   const [promoUntil, setPromoUntil] = useState("");
+  const [importing, setImporting] = useState(false);
+  const [importMessage, setImportMessage] = useState("");
 
   const withScore = (e) => ({ ...e, score: average(e.scoreSum, e.scoreCount), count: e.scoreCount });
   const list = useMemo(() => establishments.map(withScore), [establishments]);
@@ -92,6 +95,42 @@ export default function AdminApp() {
     const updatedPromos = form.promos.filter((p) => p.id !== promoId);
     setForm((f) => ({ ...f, promos: updatedPromos }));
     await establishmentsApi.update(editingId, { promos: updatedPromos });
+  }
+
+  async function removeEstablishment(id) {
+    await establishmentsApi.remove(id);
+    setScreen("establishments");
+  }
+
+  async function importFromOSM() {
+    setImporting(true);
+    setImportMessage("");
+    try {
+      const places = await fetchAnapolisPlaces();
+      const existingNames = new Set(establishments.map((e) => e.name.trim().toLowerCase()));
+      let added = 0;
+      for (const place of places) {
+        if (existingNames.has(place.name.trim().toLowerCase())) continue;
+        existingNames.add(place.name.trim().toLowerCase());
+        await addEstablishment({
+          name: place.name,
+          category: place.category,
+          bairro: place.bairro,
+          address: place.address,
+          phone: place.phone,
+          instagram: place.instagram,
+          status: "pendente",
+          scoreSum: 0,
+          scoreCount: 0,
+        });
+        added += 1;
+      }
+      setImportMessage(`${added} lugar(es) novo(s) importado(s) do OpenStreetMap. ${places.length - added} já existiam na base.`);
+    } catch (err) {
+      setImportMessage(err.message);
+    } finally {
+      setImporting(false);
+    }
   }
 
   async function removeReview(id) {
@@ -138,7 +177,7 @@ export default function AdminApp() {
     return (
       <div>
         <h1 style={{ color: palette.text, fontSize: 20, fontWeight: 700, margin: "0 0 20px" }}>Estabelecimentos</h1>
-        <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
+        <div style={{ display: "flex", gap: 10, marginBottom: 12, alignItems: "center" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, background: palette.surface, border: `1px solid ${palette.border}`, borderRadius: 12, padding: "9px 12px", flex: 1, maxWidth: 320 }}>
             <Search size={15} color={palette.textMuted} />
             <input
@@ -156,7 +195,17 @@ export default function AdminApp() {
             <option value="">Todas as categorias</option>
             {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
           </select>
+          <button
+            onClick={importFromOSM}
+            disabled={importing}
+            style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: "auto", padding: "9px 16px", borderRadius: 12, background: importing ? palette.surfaceAlt : palette.amber, border: "none", color: importing ? palette.textMuted : "#1C1410", fontSize: 12.5, fontWeight: 700, cursor: importing ? "default" : "pointer", whiteSpace: "nowrap" }}
+          >
+            <Download size={14} /> {importing ? "Importando..." : "Importar do OpenStreetMap"}
+          </button>
         </div>
+        {importMessage && (
+          <p style={{ color: palette.textMuted, fontSize: 12.5, margin: "0 0 14px" }}>{importMessage}</p>
+        )}
 
         <div style={{ background: palette.surface, border: `1px solid ${palette.border}`, borderRadius: 14, overflow: "hidden" }}>
           <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr auto", padding: "10px 16px", borderBottom: `1px solid ${palette.border}` }}>
@@ -191,9 +240,17 @@ export default function AdminApp() {
     if (!form) return null;
     return (
       <div>
-        <button onClick={() => setScreen("establishments")} style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", color: palette.textMuted, fontSize: 13, marginBottom: 16, cursor: "pointer", padding: 0 }}>
-          <ArrowLeft size={15} /> Voltar
-        </button>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+          <button onClick={() => setScreen("establishments")} style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", color: palette.textMuted, fontSize: 13, cursor: "pointer", padding: 0 }}>
+            <ArrowLeft size={15} /> Voltar
+          </button>
+          <button
+            onClick={() => { if (confirm(`Excluir "${form.name}" definitivamente?`)) removeEstablishment(editingId); }}
+            style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: `1px solid ${palette.border}`, borderRadius: 10, padding: "6px 12px", color: palette.red, fontSize: 12, fontWeight: 600, cursor: "pointer" }}
+          >
+            <Trash2 size={13} /> Excluir estabelecimento
+          </button>
+        </div>
         <h1 style={{ color: palette.text, fontSize: 20, fontWeight: 700, margin: "0 0 20px" }}>{form.name}</h1>
 
         <div style={{ background: palette.surface, border: `1px solid ${palette.border}`, borderRadius: 14, padding: 18, marginBottom: 20 }}>

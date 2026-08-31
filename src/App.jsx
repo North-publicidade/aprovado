@@ -276,7 +276,7 @@ export default function App() {
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 4, color: palette.textMuted, fontSize: 12 }}>
             <MapPin size={13} />
-            Porto Alegre
+            Anápolis
           </div>
         </div>
 
