@@ -4,10 +4,16 @@
 
 const ANAPOLIS_BBOX = "-16.4859870,-49.1940000,-16.1240000,-48.7500000"; // south,west,north,east
 
-const OVERPASS_ENDPOINTS = [
-  "https://overpass-api.de/api/interpreter",
-  "https://overpass.kumi.systems/api/interpreter",
+// O servidor público do Overpass é gratuito e comunitário — vive sobrecarregado
+// (502/504 e timeouts são comuns). Por isso tentamos mais de uma vez e em mais
+// de um espelho antes de desistir.
+const OVERPASS_ATTEMPTS = [
+  { url: "https://overpass-api.de/api/interpreter", timeout: 12000 },
+  { url: "https://overpass-api.de/api/interpreter", timeout: 12000 },
+  { url: "https://overpass.kumi.systems/api/interpreter", timeout: 10000 },
 ];
+
+export const config = { maxDuration: 45 };
 
 function guessCategory(tags) {
   const cuisine = (tags.cuisine || "").toLowerCase();
@@ -35,11 +41,11 @@ function formatAddress(tags) {
 
 async function queryOverpass(query) {
   let lastError;
-  for (const endpoint of OVERPASS_ENDPOINTS) {
+  for (const { url, timeout: ms } of OVERPASS_ATTEMPTS) {
     try {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 20000);
-      const res = await fetch(endpoint + "?data=" + encodeURIComponent(query), { signal: controller.signal });
+      const timeout = setTimeout(() => controller.abort(), ms);
+      const res = await fetch(url + "?data=" + encodeURIComponent(query), { signal: controller.signal });
       clearTimeout(timeout);
       if (!res.ok) throw new Error(`Overpass respondeu ${res.status}`);
       return await res.json();
