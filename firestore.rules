@@ -1,0 +1,17 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Fase 1: sem login. Qualquer visitante pode ler e escrever
+    // nas coleções do app (estabelecimentos, avaliações, listas).
+    // Reforçar isso quando o login for adicionado.
+    match /establishments/{id} {
+      allow read, write: if true;
+    }
+    match /reviews/{id} {
+      allow read, write: if true;
+    }
+    match /lists/{id} {
+      allow read, write: if true;
+    }
+  }
+}
