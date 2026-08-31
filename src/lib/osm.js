@@ -22,7 +22,7 @@ function guessCategory(tags) {
   if (cuisine.includes("pizza")) return "Pizzaria";
   if (cuisine.includes("burger")) return "Hamburgueria";
   if (cuisine.includes("japanese") || cuisine.includes("sushi")) return "Japonês";
-  if (shop === "bakery" || shop === "pastry" || shop === "confectionery") return "Doceria";
+  if (shop === "bakery" || shop === "pastry" || shop === "confectionery" || shop === "chocolate") return "Doceria";
   if (amenity === "ice_cream" || cuisine.includes("ice_cream") || cuisine.includes("dessert")) return "Doceria";
   if (amenity === "cafe" || cuisine.includes("coffee_shop")) return "Cafeteria";
   return "Comida brasileira";
@@ -58,7 +58,10 @@ async function queryOverpass(query) {
 }
 
 export async function fetchAnapolisPlaces() {
-  const query = `[out:json][timeout:25];(node["amenity"~"^(restaurant|cafe|fast_food|bar|pub|ice_cream)$"](${ANAPOLIS_BBOX});node["shop"~"^(bakery|confectionery|pastry)$"](${ANAPOLIS_BBOX}););out body 200;`;
+  // "nwr" pega estabelecimentos mapeados como ponto, área (prédio) ou relação —
+  // pontos isolados (node) são o mais comum, mas alguns lugares só aparecem
+  // marcados como área no mapa.
+  const query = `[out:json][timeout:25];(nwr["amenity"~"^(restaurant|cafe|fast_food|bar|pub|ice_cream|food_court|biergarten)$"](${ANAPOLIS_BBOX});nwr["shop"~"^(bakery|confectionery|pastry|deli|chocolate)$"](${ANAPOLIS_BBOX}););out center 400;`;
 
   let data;
   try {
