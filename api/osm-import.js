@@ -5,15 +5,21 @@
 const ANAPOLIS_BBOX = "-16.4859870,-49.1940000,-16.1240000,-48.7500000"; // south,west,north,east
 
 // O servidor público do Overpass é gratuito e comunitário — vive sobrecarregado
-// (502/504 e timeouts são comuns). Por isso tentamos mais de uma vez e em mais
-// de um espelho antes de desistir.
+// e limita ~2 requisições simultâneas por IP (429/502/504 são comuns). Por isso
+// tentamos mais de uma vez, com uma pequena pausa entre tentativas, em vez de
+// bater de novo imediatamente (o que só pioraria o rate limit).
 const OVERPASS_ATTEMPTS = [
-  { url: "https://overpass-api.de/api/interpreter", timeout: 12000 },
-  { url: "https://overpass-api.de/api/interpreter", timeout: 12000 },
-  { url: "https://overpass.kumi.systems/api/interpreter", timeout: 10000 },
+  { url: "https://overpass-api.de/api/interpreter", timeout: 8000 },
+  { url: "https://overpass.kumi.systems/api/interpreter", timeout: 8000 },
+  { url: "https://overpass-api.de/api/interpreter", timeout: 8000 },
+  { url: "https://overpass.kumi.systems/api/interpreter", timeout: 8000 },
 ];
 
 export const config = { maxDuration: 45 };
+
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 function guessCategory(tags) {
   const cuisine = (tags.cuisine || "").toLowerCase();
@@ -41,7 +47,9 @@ function formatAddress(tags) {
 
 async function queryOverpass(query) {
   let lastError;
-  for (const { url, timeout: ms } of OVERPASS_ATTEMPTS) {
+  for (let i = 0; i < OVERPASS_ATTEMPTS.length; i++) {
+    const { url, timeout: ms } = OVERPASS_ATTEMPTS[i];
+    if (i > 0) await wait(1500);
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), ms);
