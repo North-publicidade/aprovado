@@ -353,10 +353,14 @@ export default function App() {
           />
         </div>
 
-        <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+        <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
           <Chip label="Todos" active={feedFilter === "todos"} onClick={() => setFeedFilter("todos")} />
           <Chip label="Seguindo" active={feedFilter === "seguindo"} onClick={() => setFeedFilter("seguindo")} />
         </div>
+
+        <p style={{ color: palette.textMuted, fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", margin: "0 0 8px" }}>
+          Categorias
+        </p>
 
         <div className="no-scrollbar" style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4, marginBottom: 16 }}>
           <Chip label="Todas" active={!activeCategory} onClick={() => setActiveCategory(null)} />
