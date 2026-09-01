@@ -5,6 +5,7 @@ import {
 } from "lucide-react";
 import { palette, CATEGORY_META, CATEGORIES, MIN_SCORE, MIN_COUNT, TAG_OPTIONS, average } from "./lib/constants";
 import { useEstablishments, useReviews, useLists, addEstablishment, addReview, addList, establishmentsApi, listsApi, ensureSeeded } from "./lib/store";
+import { PEOPLE } from "./lib/people";
 
 function getDisplayName() {
   try {
@@ -17,6 +18,22 @@ function getDisplayName() {
 function setDisplayName(name) {
   try {
     localStorage.setItem("aprovado:displayName", name);
+  } catch {
+    /* localStorage indisponível */
+  }
+}
+
+function getFollowing() {
+  try {
+    return JSON.parse(localStorage.getItem("aprovado:following")) || [];
+  } catch {
+    return [];
+  }
+}
+
+function persistFollowing(ids) {
+  try {
+    localStorage.setItem("aprovado:following", JSON.stringify(ids));
   } catch {
     /* localStorage indisponível */
   }
@@ -68,7 +85,7 @@ function Chip({ label, active, onClick, icon: Icon }) {
   );
 }
 
-function EstablishmentRow({ item, onClick, locked }) {
+function EstablishmentRow({ item, onClick, locked, note }) {
   const meta = CATEGORY_META[item.category];
   return (
     <button
@@ -93,6 +110,11 @@ function EstablishmentRow({ item, onClick, locked }) {
         <p style={{ color: palette.textMuted, fontSize: 12.5, margin: "2px 0 0" }}>
           {item.category} · {item.bairro}
         </p>
+        {note && (
+          <p style={{ color: palette.amber, fontSize: 11.5, fontWeight: 600, margin: "3px 0 0" }}>
+            {note}
+          </p>
+        )}
       </div>
       {locked ? (
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2, flexShrink: 0 }}>
@@ -146,6 +168,9 @@ export default function App() {
   const [selectedTags, setSelectedTags] = useState([]);
   const [confirmInfo, setConfirmInfo] = useState(null);
   const [myName, setMyName] = useState(getDisplayName());
+  const [following, setFollowing] = useState(getFollowing());
+  const [viewingPerson, setViewingPerson] = useState(null);
+  const [feedFilter, setFeedFilter] = useState("todos");
 
   const withReviewStats = (e) => ({
     ...e,
@@ -167,6 +192,43 @@ export default function App() {
   );
 
   const myCount = reviews.filter((r) => r.author === myName && !r.flagged).length;
+
+  const resolvedPeople = useMemo(
+    () => PEOPLE.map((p) => ({
+      ...p,
+      ratings: p.ratingsByName
+        .map((r) => {
+          const est = establishments.find((e) => e.name.toLowerCase() === r.name.toLowerCase());
+          return est ? { est, given: r.score } : null;
+        })
+        .filter(Boolean),
+    })),
+    [establishments]
+  );
+
+  function followedRatersFor(estId) {
+    return resolvedPeople
+      .filter((p) => following.includes(p.id) && p.ratings.some((r) => r.est.id === estId))
+      .map((p) => p.name);
+  }
+
+  function toggleFollow(id) {
+    setFollowing((prev) => {
+      const next = prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id];
+      persistFollowing(next);
+      return next;
+    });
+  }
+
+  function openPerson(person) {
+    setViewingPerson(person.id);
+    setScreen("personProfile");
+  }
+
+  function openRatedPlace(est) {
+    if (est.status === "aprovado") openDetail(est);
+    else startRate("pending", est);
+  }
 
   function goHome() {
     setScreen("home"); setActiveTab("home"); setRateQuery("");
@@ -256,6 +318,7 @@ export default function App() {
   const filteredPublic = publicList
     .filter((e) => (!activeCategory || e.category === activeCategory))
     .filter((e) => query === "" || e.name.toLowerCase().includes(query.toLowerCase()) || e.category.toLowerCase().includes(query.toLowerCase()))
+    .filter((e) => feedFilter !== "seguindo" || followedRatersFor(e.id).length > 0)
     .sort((a, b) => b.score - a.score);
 
   const filteredPending = pendingList.filter((e) => !activeCategory || e.category === activeCategory);
@@ -290,7 +353,12 @@ export default function App() {
           />
         </div>
 
-        <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4, marginBottom: 16 }}>
+        <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+          <Chip label="Todos" active={feedFilter === "todos"} onClick={() => setFeedFilter("todos")} />
+          <Chip label="Seguindo" active={feedFilter === "seguindo"} onClick={() => setFeedFilter("seguindo")} />
+        </div>
+
+        <div className="no-scrollbar" style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4, marginBottom: 16 }}>
           <Chip label="Todas" active={!activeCategory} onClick={() => setActiveCategory(null)} />
           {CATEGORIES.map((c) => (
             <Chip key={c} label={c} active={activeCategory === c} onClick={() => setActiveCategory(c)} icon={CATEGORY_META[c].icon} />
@@ -302,10 +370,19 @@ export default function App() {
         </p>
 
         {filteredPublic.length === 0 && (
-          <p style={{ color: palette.textMuted, fontSize: 13, margin: "0 0 16px" }}>Nada por aqui ainda com esse filtro.</p>
+          <p style={{ color: palette.textMuted, fontSize: 13, margin: "0 0 16px" }}>
+            {feedFilter === "seguindo"
+              ? "Ninguém que você segue avaliou um lugar nesse filtro ainda."
+              : "Nada por aqui ainda com esse filtro."}
+          </p>
         )}
         {filteredPublic.map((item) => (
-          <EstablishmentRow key={item.id} item={item} onClick={() => openDetail(item)} />
+          <EstablishmentRow
+            key={item.id}
+            item={item}
+            onClick={() => openDetail(item)}
+            note={feedFilter === "seguindo" ? `recomendado por ${followedRatersFor(item.id).join(", ")}` : undefined}
+          />
         ))}
 
         {filteredPending.length > 0 && (
@@ -609,11 +686,77 @@ export default function App() {
             <p style={{ color: palette.textMuted, fontSize: 12.5, margin: "2px 0 0" }}>{myCount} avaliações enviadas</p>
           </div>
         </div>
-        <div style={{ background: palette.surface, border: `1px solid ${palette.border}`, borderRadius: 14, padding: 14 }}>
+        <div style={{ background: palette.surface, border: `1px solid ${palette.border}`, borderRadius: 14, padding: 14, marginBottom: 24 }}>
           <p style={{ color: palette.textMuted, fontSize: 12.5, lineHeight: 1.6, margin: 0 }}>
             Cada avaliação sua ajuda a manter essa lista só com lugares que valem a pena. Nada aparece aqui sem passar pelo crivo de quem realmente foi comer.
           </p>
         </div>
+
+        <p style={{ color: palette.text, fontSize: 14, fontWeight: 600, margin: "0 0 10px" }}>Pessoas</p>
+        {resolvedPeople.map((p) => {
+          const isFollowing = following.includes(p.id);
+          return (
+            <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", borderRadius: 14, marginBottom: 8, background: palette.surface, border: `1px solid ${palette.border}` }}>
+              <button
+                onClick={() => openPerson(p)}
+                style={{ flex: 1, display: "flex", alignItems: "center", gap: 12, background: "none", border: "none", padding: 0, textAlign: "left", cursor: "pointer" }}
+              >
+                <div style={{ width: 38, height: 38, borderRadius: "50%", background: palette.surfaceAlt, display: "flex", alignItems: "center", justifyContent: "center", color: palette.amber, fontWeight: 700, fontSize: 14, flexShrink: 0 }}>
+                  {p.name[0].toUpperCase()}
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <p style={{ color: palette.text, fontSize: 13.5, fontWeight: 600, margin: 0 }}>{p.name}</p>
+                  <p style={{ color: palette.textMuted, fontSize: 11.5, margin: "2px 0 0" }}>{p.ratings.length} avaliações</p>
+                </div>
+              </button>
+              <button
+                onClick={() => toggleFollow(p.id)}
+                style={{ padding: "7px 14px", borderRadius: 999, flexShrink: 0, cursor: "pointer", border: `1px solid ${isFollowing ? palette.border : palette.amber}`, background: isFollowing ? "transparent" : palette.amber, color: isFollowing ? palette.textMuted : "#1C1410", fontSize: 11.5, fontWeight: 700 }}
+              >
+                {isFollowing ? "Seguindo" : "Seguir"}
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
+  function renderPersonProfile() {
+    const person = resolvedPeople.find((p) => p.id === viewingPerson);
+    if (!person) return null;
+    const isFollowing = following.includes(person.id);
+    return (
+      <div style={{ padding: "0 16px 16px" }}>
+        <ScreenHeader title="" onBack={() => setScreen("profile")} />
+        <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "8px 0 20px" }}>
+          <div style={{ width: 50, height: 50, borderRadius: "50%", background: palette.surfaceAlt, display: "flex", alignItems: "center", justifyContent: "center", color: palette.amber, fontWeight: 700, fontSize: 18, flexShrink: 0 }}>
+            {person.name[0].toUpperCase()}
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <p style={{ color: palette.text, fontSize: 16, fontWeight: 700, margin: 0 }}>{person.name}</p>
+            <p style={{ color: palette.textMuted, fontSize: 12.5, margin: "2px 0 0" }}>{person.ratings.length} avaliações</p>
+          </div>
+          <button
+            onClick={() => toggleFollow(person.id)}
+            style={{ padding: "8px 16px", borderRadius: 999, flexShrink: 0, cursor: "pointer", border: `1px solid ${isFollowing ? palette.border : palette.amber}`, background: isFollowing ? "transparent" : palette.amber, color: isFollowing ? palette.textMuted : "#1C1410", fontSize: 12.5, fontWeight: 700 }}
+          >
+            {isFollowing ? "Seguindo" : "Seguir"}
+          </button>
+        </div>
+
+        <p style={{ color: palette.text, fontSize: 14, fontWeight: 600, margin: "0 0 10px" }}>Lugares avaliados</p>
+        {person.ratings.length === 0 && (
+          <p style={{ color: palette.textMuted, fontSize: 13 }}>Ainda sem avaliações registradas.</p>
+        )}
+        {person.ratings.map(({ est, given }) => (
+          <EstablishmentRow
+            key={est.id}
+            item={{ ...est, score: average(est.scoreSum, est.scoreCount), count: est.scoreCount }}
+            note={`deu nota ${given}`}
+            onClick={() => openRatedPlace(est)}
+          />
+        ))}
       </div>
     );
   }
@@ -769,12 +912,13 @@ export default function App() {
     tags: renderTags,
     confirm: renderConfirm,
     profile: renderProfile,
+    personProfile: renderPersonProfile,
     lists: renderLists,
     listCreate: renderListCreate,
     listDetail: renderListDetail,
   };
 
-  const showNav = ["home", "avaliar", "profile", "detail", "lists", "listDetail"].includes(screen);
+  const showNav = ["home", "avaliar", "profile", "detail", "lists", "listDetail", "personProfile"].includes(screen);
 
   return (
     <div style={{ minHeight: "100vh", background: "radial-gradient(circle at 50% 0%, #241A12 0%, #0F0B08 70%)", display: "flex", alignItems: "center", justifyContent: "center", padding: "32px 12px", fontFamily: "system-ui, -apple-system, sans-serif" }}>
