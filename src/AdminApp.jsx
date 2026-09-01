@@ -116,6 +116,7 @@ export default function AdminApp() {
           name: place.name,
           category: place.category,
           bairro: place.bairro,
+          city: "Anápolis",
           address: place.address,
           phone: place.phone,
           instagram: place.instagram,

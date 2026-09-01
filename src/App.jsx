@@ -39,6 +39,24 @@ function persistFollowing(ids) {
   }
 }
 
+const DEFAULT_CITY = "Anápolis";
+
+function getCity() {
+  try {
+    return localStorage.getItem("aprovado:city") || DEFAULT_CITY;
+  } catch {
+    return DEFAULT_CITY;
+  }
+}
+
+function persistCity(city) {
+  try {
+    localStorage.setItem("aprovado:city", city);
+  } catch {
+    /* localStorage indisponível */
+  }
+}
+
 function Stamp({ score, size = 82 }) {
   const approved = score >= 8;
   const color = approved ? palette.green : palette.amber;
@@ -171,6 +189,8 @@ export default function App() {
   const [following, setFollowing] = useState(getFollowing());
   const [viewingPerson, setViewingPerson] = useState(null);
   const [feedFilter, setFeedFilter] = useState("todos");
+  const [city, setCity] = useState(getCity());
+  const [cityDraft, setCityDraft] = useState("");
 
   const withReviewStats = (e) => ({
     ...e,
@@ -179,16 +199,26 @@ export default function App() {
     reviews: reviews.filter((r) => r.establishmentId === e.id && !r.flagged),
   });
 
+  const cityEstablishments = useMemo(
+    () => establishments.filter((e) => (e.city || DEFAULT_CITY) === city),
+    [establishments, city]
+  );
+
+  const knownCities = useMemo(
+    () => Array.from(new Set([DEFAULT_CITY, ...establishments.map((e) => e.city || DEFAULT_CITY)])).sort(),
+    [establishments]
+  );
+
   const publicList = useMemo(
-    () => establishments.filter((e) => e.status === "aprovado").map(withReviewStats),
-    [establishments, reviews]
+    () => cityEstablishments.filter((e) => e.status === "aprovado").map(withReviewStats),
+    [cityEstablishments, reviews]
   );
 
   const pendingList = useMemo(
-    () => establishments
+    () => cityEstablishments
       .filter((e) => e.status === "pendente")
       .map((e) => ({ ...e, needed: Math.max(0, MIN_COUNT - e.scoreCount) })),
-    [establishments]
+    [cityEstablishments]
   );
 
   const myCount = reviews.filter((r) => r.author === myName && !r.flagged).length;
@@ -228,6 +258,16 @@ export default function App() {
   function openRatedPlace(est) {
     if (est.status === "aprovado") openDetail(est);
     else startRate("pending", est);
+  }
+
+  function selectCity(name) {
+    const trimmed = name.trim();
+    if (trimmed === "") return;
+    setCity(trimmed);
+    persistCity(trimmed);
+    setActiveCategory(null);
+    setScreen("home");
+    setActiveTab("home");
   }
 
   function goHome() {
@@ -272,7 +312,7 @@ export default function App() {
   }
 
   function pickCategory(cat) {
-    const draft = { name: draftName || rateQuery, category: cat, bairro: "sua indicação" };
+    const draft = { name: draftName || rateQuery, category: cat, bairro: "sua indicação", city };
     startRate("new", draft);
   }
 
@@ -286,6 +326,7 @@ export default function App() {
         name: rateTarget.data.name,
         category: rateTarget.data.category,
         bairro: rateTarget.data.bairro,
+        city: rateTarget.data.city || city,
         address: "", phone: "", instagram: null,
         status: "pendente", scoreSum: pickedScore, scoreCount: 1, tags: chosenTags,
       });
@@ -324,7 +365,7 @@ export default function App() {
   const filteredPending = pendingList.filter((e) => !activeCategory || e.category === activeCategory);
 
   const rateMatches = rateQuery.length > 0
-    ? establishments
+    ? cityEstablishments
         .filter((e) => e.name.toLowerCase().includes(rateQuery.toLowerCase()))
         .map((e) => ({ ...e, _mode: e.status === "aprovado" ? "public" : "pending", score: average(e.scoreSum, e.scoreCount), count: e.scoreCount }))
     : [];
@@ -337,10 +378,13 @@ export default function App() {
             <p style={{ fontFamily: "Georgia, serif", color: palette.text, fontSize: 26, fontWeight: 700, margin: 0 }}>Aprovado</p>
             <p style={{ color: palette.textMuted, fontSize: 12.5, margin: "2px 0 0" }}>só indico o que é bom</p>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 4, color: palette.textMuted, fontSize: 12 }}>
+          <button
+            onClick={() => { setCityDraft(""); setScreen("cityPicker"); }}
+            style={{ display: "flex", alignItems: "center", gap: 4, color: palette.textMuted, fontSize: 12, background: "none", border: "none", padding: 0, cursor: "pointer" }}
+          >
             <MapPin size={13} />
-            Anápolis
-          </div>
+            {city}
+          </button>
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: 8, background: palette.surface, border: `1px solid ${palette.border}`, borderRadius: 14, padding: "10px 12px", marginBottom: 14 }}>
@@ -397,6 +441,52 @@ export default function App() {
             ))}
           </>
         )}
+      </div>
+    );
+  }
+
+  function renderCityPicker() {
+    return (
+      <div style={{ padding: "0 16px 16px" }}>
+        <ScreenHeader title="Qual cidade você está?" onBack={() => { setScreen("home"); setActiveTab("home"); }} />
+        <p style={{ color: palette.textMuted, fontSize: 12.5, margin: "8px 0 16px" }}>
+          Os estabelecimentos mostrados no app são só os cadastrados na cidade escolhida.
+        </p>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, background: palette.surface, border: `1px solid ${palette.border}`, borderRadius: 14, padding: "10px 12px", marginBottom: 12 }}>
+          <MapPin size={16} color={palette.textMuted} />
+          <input
+            value={cityDraft}
+            onChange={(e) => setCityDraft(e.target.value)}
+            placeholder="Digite o nome da cidade"
+            style={{ background: "none", border: "none", outline: "none", color: palette.text, fontSize: 13.5, width: "100%" }}
+          />
+        </div>
+        <button
+          onClick={() => selectCity(cityDraft)}
+          disabled={cityDraft.trim() === ""}
+          style={{ width: "100%", padding: "13px 0", borderRadius: 14, border: "none", marginBottom: 22, background: cityDraft.trim() === "" ? palette.surfaceAlt : palette.amber, color: cityDraft.trim() === "" ? palette.textMuted : "#1C1410", fontSize: 14, fontWeight: 700, cursor: cityDraft.trim() === "" ? "default" : "pointer" }}
+        >
+          Usar essa cidade
+        </button>
+
+        <p style={{ color: palette.textMuted, fontSize: 12, fontWeight: 600, margin: "0 0 10px" }}>Cidades com lugares cadastrados</p>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+          {knownCities.map((c) => (
+            <button
+              key={c}
+              onClick={() => selectCity(c)}
+              style={{
+                padding: "9px 16px", borderRadius: 999, cursor: "pointer",
+                border: `1px solid ${c === city ? palette.amber : palette.border}`,
+                background: c === city ? palette.amber : "transparent",
+                color: c === city ? "#1C1410" : palette.text,
+                fontSize: 13, fontWeight: 600,
+              }}
+            >
+              {c}
+            </button>
+          ))}
+        </div>
       </div>
     );
   }
@@ -909,6 +999,7 @@ export default function App() {
 
   const screens = {
     home: renderHome,
+    cityPicker: renderCityPicker,
     detail: renderDetail,
     avaliar: renderAvaliar,
     categoryPick: renderCategoryPick,
