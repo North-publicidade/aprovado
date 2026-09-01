@@ -777,7 +777,7 @@ export default function App() {
               placeholder="Seu nome"
               style={{ background: "none", border: "none", outline: "none", color: palette.text, fontSize: 15, fontWeight: 700, padding: 0, width: "100%" }}
             />
-            <p style={{ color: palette.textMuted, fontSize: 12.5, margin: "2px 0 0" }}>{myCount} avaliações enviadas</p>
+            <p style={{ color: palette.textMuted, fontSize: 12.5, margin: "2px 0 0" }}>{myCount} avaliações enviadas · seguindo {following.length} {following.length === 1 ? "pessoa" : "pessoas"}</p>
           </div>
         </div>
         <div style={{ background: palette.surface, border: `1px solid ${palette.border}`, borderRadius: 14, padding: 14, marginBottom: 24 }}>
@@ -830,6 +830,9 @@ export default function App() {
           <div style={{ flex: 1, minWidth: 0 }}>
             <p style={{ color: palette.text, fontSize: 16, fontWeight: 700, margin: 0 }}>{person.name}</p>
             <p style={{ color: palette.textMuted, fontSize: 12.5, margin: "2px 0 0" }}>{person.ratings.length} avaliações</p>
+            <p style={{ color: palette.textMuted, fontSize: 12, margin: "4px 0 0" }}>
+              <span style={{ color: palette.text, fontWeight: 700 }}>{person.followers}</span> seguidores · <span style={{ color: palette.text, fontWeight: 700 }}>{person.following}</span> seguindo
+            </p>
           </div>
           <button
             onClick={() => toggleFollow(person.id)}
